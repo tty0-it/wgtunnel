@@ -127,6 +127,21 @@ func main() {
 				Usage:   "The instance ID to annotate all traces with that uniquely identifies this deployment.",
 				EnvVars: []string{"TUNNELD_TRACING_INSTANCE_ID"},
 			},
+			&cli.StringFlag{
+				Name:    "basic-auth-user",
+				Usage:   "The username for basic auth.",
+				EnvVars: []string{"TUNNELD_BASIC_AUTH_USER"},
+			},
+			&cli.StringFlag{
+				Name:    "basic-auth-pass",
+				Usage:   "The password for basic auth.",
+				EnvVars: []string{"TUNNELD_BASIC_AUTH_PASS"},
+			},
+			&cli.StringFlag{
+				Name:    "basic-auth-pass-file",
+				Usage:   "The file containing the password for basic auth. The file will be created and populated with a fresh password if it does not exist. You must specify this or basic-auth-pass.",
+				EnvVars: []string{"TUNNELD_BASIC_AUTH_PASS_FILE"},
+			},
 		},
 		Action: runApp,
 	}
@@ -153,6 +168,9 @@ func runApp(ctx *cli.Context) error {
 		pprofListenAddress     = ctx.String("pprof-listen-address")
 		tracingHoneycombTeam   = ctx.String("tracing-honeycomb-team")
 		tracingInstanceID      = ctx.String("tracing-instance-id")
+		basicAuthUser          = ctx.String("basic-auth-user")
+		basicAuthPass          = ctx.String("basic-auth-pass")
+		basicAuthPassFile      = ctx.String("basic-auth-pass-file")
 	)
 	if baseURL == "" {
 		return xerrors.New("base-url is required. See --help for more information.")
@@ -168,6 +186,12 @@ func runApp(ctx *cli.Context) error {
 	}
 	if wireguardKey != "" && wireguardKeyFile != "" {
 		return xerrors.New("wireguard-key and wireguard-key-file are mutually exclusive. See --help for more information.")
+	}
+	if basicAuthPass != "" && basicAuthPassFile != "" {
+		return xerrors.New("basic-auth-pass and basic-auth-pass-file are mutually exclusive. See --help for more information.")
+	}
+	if basicAuthUser != "" && basicAuthPass == "" && basicAuthPassFile == "" {
+		return xerrors.New("basic-auth-user requires basic-auth-pass or basic-auth-pass-file. See --help for more information.")
 	}
 
 	logger := slog.Make(sloghuman.Sink(os.Stderr)).Leveled(slog.LevelInfo)
@@ -246,6 +270,31 @@ func runApp(ctx *cli.Context) error {
 	}
 	logger.Info(ctx.Context, "parsed private key", slog.F("hash", wireguardKeyParsed.Hash()))
 
+	if basicAuthPassFile != "" {
+		_, err = os.Stat(basicAuthPassFile)
+		if errors.Is(err, os.ErrNotExist) {
+			logger.Info(ctx.Context, "generating password to file", slog.F("path", basicAuthPassFile))
+			pass, err := tunnelsdk.GeneratePassword(12)
+			if err != nil {
+				return xerrors.Errorf("could not generate password: %w", err)
+			}
+
+			err = os.WriteFile(basicAuthPassFile, []byte(pass), 0600)
+			if err != nil {
+				return xerrors.Errorf("could not write password to %q: %w", basicAuthPassFile, err)
+			}
+		} else if err != nil {
+			return xerrors.Errorf("could not stat basic-auth-pass-file %q: %w", basicAuthPassFile, err)
+		}
+
+		logger.Info(ctx.Context, "reading password from file", slog.F("path", basicAuthPassFile))
+		basicAuthPassBytes, err := os.ReadFile(basicAuthPassFile)
+		if err != nil {
+			return xerrors.Errorf("could not read basic-auth-pass-file %q: %w", basicAuthPassFile, err)
+		}
+		basicAuthPass = string(basicAuthPassBytes)
+	}
+
 	options := &tunneld.Options{
 		BaseURL:                baseURLParsed,
 		WireguardEndpoint:      wireguardEndpoint,
@@ -255,6 +304,8 @@ func runApp(ctx *cli.Context) error {
 		WireguardServerIP:      wireguardServerIPParsed,
 		WireguardNetworkPrefix: wireguardNetworkPrefixParsed,
 		RealIPHeader:           realIPHeader,
+		BasicAuthUser:          basicAuthUser,
+		BasicAuthPass:          basicAuthPass,
 	}
 	td, err := tunneld.New(options)
 	if err != nil {

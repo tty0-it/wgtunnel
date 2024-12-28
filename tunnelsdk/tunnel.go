@@ -46,6 +46,22 @@ type Key struct {
 	isPrivate bool
 }
 
+// GeneratePassword generates a new random password of the given length.
+func GeneratePassword(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	password := make([]byte, length)
+	_, err := rand.Read(password)
+	if err != nil {
+		return "", err
+	}
+
+	for i, b := range password {
+		password[i] = charset[int(b)%len(charset)]
+	}
+
+	return string(password), nil
+}
+
 // GenerateWireguardPrivateKey generates a new wireguard private key using
 // secure cryptography. The caller should store the key (using key.String()) in
 // a safe place like the user's home directory, and use it in the future rather

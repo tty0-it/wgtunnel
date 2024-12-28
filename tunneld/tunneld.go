@@ -28,6 +28,9 @@ type API struct {
 
 	pkeyCacheMu sync.RWMutex
 	pkeyCache   map[netip.Addr]cachedPeer
+
+	basicAuthUser string
+	basicAuthPass string
 }
 
 type cachedPeer struct {
@@ -126,6 +129,8 @@ listen_port=%d`,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		},
+		basicAuthUser: options.BasicAuthUser,
+		basicAuthPass: options.BasicAuthPass,
 	}, nil
 }
 

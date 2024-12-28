@@ -25,6 +25,20 @@ import (
 	"github.com/coder/wgtunnel/tunnelsdk"
 )
 
+func basicAuthMiddleware(realm string, credentials map[string]string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, pass, ok := r.BasicAuth()
+			if !ok || credentials[user] != pass {
+				w.Header().Set("WWW-Authenticate", `Basic realm="`+realm+`"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func (api *API) Router() http.Handler {
 	var (
 		hr            = hostrouter.New()
@@ -54,9 +68,14 @@ func (api *API) Router() http.Handler {
 		}),
 	)
 
+	if api.BasicAuthUser != "" && api.BasicAuthPass != "" {
+		apiRouter.Use(basicAuthMiddleware("wgtunnel", map[string]string{
+			api.BasicAuthUser: api.BasicAuthPass,
+		}))
+	}
+
 	apiRouter.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("https://coder.com"))
+		http.Redirect(w, r, "https://github.com/tty0-it/wgtunnel", http.StatusTemporaryRedirect)
 	})
 	apiRouter.Post("/tun", api.postTun)
 	apiRouter.Post("/api/v2/clients", api.postClients)

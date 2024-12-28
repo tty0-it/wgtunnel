@@ -16,18 +16,22 @@ import (
 )
 
 // New creates a tunneld client for the provided URL.
-func New(serverURL *url.URL) *Client {
+func New(serverURL *url.URL, basicAuthUser, basicAuthPass string) *Client {
 	return &Client{
-		HTTPClient: &http.Client{},
-		URL:        serverURL,
+		HTTPClient:    &http.Client{},
+		URL:           serverURL,
+		BasicAuthUser: basicAuthUser,
+		BasicAuthPass: basicAuthPass,
 	}
 }
 
 // Client provides HTTP methods for the tunneld API and a full wireguard tunnel
 // client implementation.
 type Client struct {
-	HTTPClient *http.Client
-	URL        *url.URL
+	HTTPClient    *http.Client
+	URL           *url.URL
+	BasicAuthUser string
+	BasicAuthPass string
 }
 
 // Request performs an HTTP request with the body provided. The caller is
@@ -56,6 +60,9 @@ func (c *Client) Request(ctx context.Context, method, path string, body interfac
 	req, err := http.NewRequestWithContext(ctx, method, serverURL.String(), &buf)
 	if err != nil {
 		return nil, xerrors.Errorf("create request: %w", err)
+	}
+	if c.BasicAuthUser != "" && c.BasicAuthPass != "" {
+		req.SetBasicAuth(c.BasicAuthUser, c.BasicAuthPass)
 	}
 
 	if body != nil {

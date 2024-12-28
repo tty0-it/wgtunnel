@@ -81,6 +81,21 @@ func main() {
 						Usage:   "The file containing the private key for the wireguard client. It should contain a base64 encoded key. The file will be created and populated with a fresh key if it does not exist. You must specify this or wireguard-key.",
 						EnvVars: []string{"TUNNEL_WIREGUARD_KEY_FILE"},
 					},
+					&cli.StringFlag{
+						Name:    "basic-auth-user",
+						Usage:   "The username for basic auth.",
+						EnvVars: []string{"TUNNEL_BASIC_AUTH_USER"},
+					},
+					&cli.StringFlag{
+						Name:    "basic-auth-pass",
+						Usage:   "The password for basic auth.",
+						EnvVars: []string{"TUNNEL_BASIC_AUTH_PASS"},
+					},
+					&cli.StringFlag{
+						Name:    "basic-auth-pass-file",
+						Usage:   "The file containing the password for basic auth. The file will be created and populated with a fresh password if it does not exist. You must specify this or basic-auth-pass.",
+						EnvVars: []string{"TUNNEL_BASIC_AUTH_PASS_FILE"},
+					},
 				},
 				Action: runApp,
 			},
@@ -95,10 +110,13 @@ func main() {
 
 func runApp(ctx *cli.Context) error {
 	var (
-		verbose          = ctx.Bool("verbose")
-		apiURL           = ctx.String("api-url")
-		wireguardKey     = ctx.String("wireguard-key")
-		wireguardKeyFile = ctx.String("wireguard-key-file")
+		verbose           = ctx.Bool("verbose")
+		apiURL            = ctx.String("api-url")
+		wireguardKey      = ctx.String("wireguard-key")
+		wireguardKeyFile  = ctx.String("wireguard-key-file")
+		basicAuthUser     = ctx.String("basic-auth-user")
+		basicAuthPass     = ctx.String("basic-auth-pass")
+		basicAuthPassFile = ctx.String("basic-auth-pass-file")
 	)
 	if apiURL == "" {
 		return xerrors.New("api-url is required. See --help for more information.")
@@ -156,7 +174,17 @@ func runApp(ctx *cli.Context) error {
 		return xerrors.Errorf("could not parse wireguard-key or wireguard-key-file: %w", err)
 	}
 
-	client := tunnelsdk.New(apiURLParsed)
+	if basicAuthPassFile != "" {
+		fileBytes, err := os.ReadFile(basicAuthPassFile)
+		if errors.Is(err, os.ErrNotExist) {
+			return xerrors.Errorf("basic-auth-pass-file %q does not exist", basicAuthPassFile)
+		} else if err != nil {
+			return xerrors.Errorf("failed to read basic-auth-pass-file %q: %w", basicAuthPassFile, err)
+		}
+		basicAuthPass = string(fileBytes)
+	}
+
+	client := tunnelsdk.New(apiURLParsed, basicAuthUser, basicAuthPass)
 	tunnel, err := client.LaunchTunnel(ctx.Context, tunnelsdk.TunnelConfig{
 		Log:        logger,
 		PrivateKey: wireguardKeyParsed,

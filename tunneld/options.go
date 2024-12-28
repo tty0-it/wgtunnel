@@ -78,6 +78,13 @@ type Options struct {
 
 	// PeerTimeout is how long the server will wait before removing the peer.
 	PeerTimeout time.Duration
+
+	// BasicAuthUser is the username for basic auth. If set, BasicAuthPass must
+	// also be set.
+	BasicAuthUser string
+	// BasicAuthPass is the password for basic auth. If set, BasicAuthUser must
+	// also be set.
+	BasicAuthPass string
 }
 
 // Validate checks that the options are valid and populates default values for
@@ -146,6 +153,12 @@ func (options *Options) Validate() error {
 			options.PeerRegisterInterval.String(),
 			options.PeerTimeout.String(),
 		)
+	}
+	if options.BasicAuthUser != "" && options.BasicAuthPass == "" {
+		return xerrors.New("BasicAuthUser is set, but BasicAuthPass is not")
+	}
+	if options.BasicAuthPass != "" && options.BasicAuthUser == "" {
+		return xerrors.New("BasicAuthPass is set, but BasicAuthUser is not")
 	}
 
 	return nil
