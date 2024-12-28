@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -32,32 +33,58 @@ func main() {
 		Usage:     "run a wgtunnel client",
 		ArgsUsage: "<target-address (e.g. 127.0.0.1:8080)>",
 		Version:   buildinfo.Version(),
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "verbose",
-				Aliases: []string{"v"},
-				Usage:   "Enable verbose logging.",
-				EnvVars: []string{"TUNNEL_VERBOSE"},
+		Commands: []*cli.Command{
+			{
+				Name:  "version",
+				Usage: "Print the version.",
+				Action: func(ctx *cli.Context) error {
+					fmt.Println(buildinfo.Version())
+					return nil
+				},
 			},
-			&cli.StringFlag{
-				Name:    "api-url",
-				Usage:   "The base URL of the tunnel API.",
-				EnvVars: []string{"TUNNEL_API_URL"},
+			{
+				Name:  "genkey",
+				Usage: "Generate a new wireguard key.",
+				Action: func(ctx *cli.Context) error {
+					key, err := tunnelsdk.GeneratePrivateKey()
+					if err != nil {
+						return xerrors.Errorf("generate key: %w", err)
+					}
+					fmt.Println(key.String())
+					return nil
+				},
 			},
-			&cli.StringFlag{
-				Name:    "wireguard-key",
-				Aliases: []string{"wg-key"},
-				Usage:   "The private key for the wireguard client. It should be base64 encoded. You must specify this or wireguard-key-file.",
-				EnvVars: []string{"TUNNEL_WIREGUARD_KEY"},
-			},
-			&cli.StringFlag{
-				Name:    "wireguard-key-file",
-				Aliases: []string{"wg-key-file"},
-				Usage:   "The file containing the private key for the wireguard client. It should contain a base64 encoded key. The file will be created and populated with a fresh key if it does not exist. You must specify this or wireguard-key.",
-				EnvVars: []string{"TUNNEL_WIREGUARD_KEY_FILE"},
+			{
+				Name:  "run",
+				Usage: "Run the tunnel client.",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "verbose",
+						Aliases: []string{"v"},
+						Usage:   "Enable verbose logging.",
+						EnvVars: []string{"TUNNEL_VERBOSE"},
+					},
+					&cli.StringFlag{
+						Name:    "api-url",
+						Usage:   "The base URL of the tunnel API.",
+						EnvVars: []string{"TUNNEL_API_URL"},
+					},
+					&cli.StringFlag{
+						Name:    "wireguard-key",
+						Aliases: []string{"wg-key"},
+						Usage:   "The private key for the wireguard client. It should be base64 encoded. You must specify this or wireguard-key-file.",
+						EnvVars: []string{"TUNNEL_WIREGUARD_KEY"},
+					},
+					&cli.StringFlag{
+						Name:    "wireguard-key-file",
+						Aliases: []string{"wg-key-file"},
+						Usage:   "The file containing the private key for the wireguard client. It should contain a base64 encoded key. The file will be created and populated with a fresh key if it does not exist. You must specify this or wireguard-key.",
+						EnvVars: []string{"TUNNEL_WIREGUARD_KEY_FILE"},
+					},
+				},
+				Action: runApp,
 			},
 		},
-		Action: runApp,
 	}
 
 	err := app.Run(os.Args)
@@ -107,7 +134,7 @@ func runApp(ctx *cli.Context) error {
 
 	if wireguardKeyFile != "" {
 		fileBytes, err := os.ReadFile(wireguardKeyFile)
-		if xerrors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) {
 			key, err := tunnelsdk.GeneratePrivateKey()
 			if err != nil {
 				return xerrors.Errorf("failed to generate wireguard key: %w", err)
