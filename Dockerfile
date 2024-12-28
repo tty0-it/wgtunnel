@@ -12,5 +12,6 @@ RUN adduser -D -u 1000 tunneld
 USER tunneld
 
 COPY tunneld /
+COPY tunnel /
 
 CMD ["/tunneld"]
