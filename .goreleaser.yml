@@ -1,4 +1,7 @@
 version: 2
+archives:
+  - id: default
+    allow_different_binary_count: true
 builds:
   - env:
       - CGO_ENABLED=0
