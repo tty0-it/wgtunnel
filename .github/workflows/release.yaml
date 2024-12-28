@@ -1,100 +1,39 @@
-name: release
+name: goreleaser
+
 on:
+  pull_request:
   push:
+    # run only against tags
     tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      snapshot:
-        description: Force a dev version to be generated, implies dry_run.
-        type: boolean
-        required: true
-      dry_run:
-        description: Perform a dry-run release.
-        type: boolean
-        required: true
+      - "*"
 
 permissions:
-  # Required to publish a release
   contents: write
-  # Necessary to push docker images to ghcr.io.
-  packages: write
-
-env:
-  WGTUNNEL_RELEASE: ${{ github.event.inputs.snapshot && 'false' || 'true' }}
+  # packages: write
+  # issues: write
+  # id-token: write
 
 jobs:
-  release:
+  goreleaser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # If the event that triggered the build was an annotated tag (which our
-      # tags are supposed to be), actions/checkout has a bug where the tag in
-      # question is only a lightweight tag and not a full annotated tag. This
-      # command seems to fix it.
-      # https://github.com/actions/checkout/issues/290
-      - name: Fetch git tags
-        run: git fetch --tags --force
-
-      - name: Docker Login
-        uses: docker/login-action@v2
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/setup-go@v3
+          go-version: stable
+      # More assembly might be required: Docker logins, GPG, etc.
+      # It all depends on your needs.
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          go-version: "~1.20"
-
-      - name: Build tunneld and Docker images
-        id: build
-        run: |
-          set -euo pipefail
-          go mod download
-
-          make clean
-          make -j build/tunneld build/tunneld.tag
-
-          image_tag=$(cat build/tunneld.tag)
-          if [[ "$image_tag" == "" ]]; then
-            echo "No tag found in build/tunneld.tag"
-            exit 1
-          fi
-
-          echo "docker_tag=${image_tag}" >> $GITHUB_OUTPUT
-
-      - name: Push Docker image
-        if: ${{ !github.event.inputs.dry_run && !github.event.inputs.snapshot }}
-        run: |
-          set -euxo pipefail
-
-          image_tag="${{ steps.build.outputs.docker_tag }}"
-          docker push "$image_tag"
-
-          latest_tag="ghcr.io/coder/wgtunnel/tunneld:latest"
-          docker tag "$image_tag" "$latest_tag"
-          docker push "$latest_tag"
-
-      - name: ls build
-        run: ls -lh build
-
-      - name: Publish release
-        if: ${{ !github.event.inputs.dry_run && !github.event.inputs.snapshot }}
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "build/tunneld"
-          body: "Docker image: `${{ steps.build.outputs.docker_tag }}`"
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload artifacts to actions (if dry-run or snapshot)
-        if: ${{ github.event.inputs.dry_run || github.event.inputs.snapshot }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: release-artifacts
-          path: |
-            ./build/tunneld
-          retention-days: 7
+          # either 'goreleaser' (default) or 'goreleaser-pro'
+          distribution: goreleaser
+          # 'latest', 'nightly', or a semver
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
